@@ -155,14 +155,43 @@ export default function EditEventScreen() {
       {/* ── Date & Heure ─── */}
       <SectionCard icon="calendar-outline" title="Date & Heure">
         <View style={styles.row}>
-          <View style={styles.rowItem}>
-            <FieldLabel label="Date début" required />
-            <TextInput style={styles.input} value={startDate} onChangeText={setStartDate} placeholderTextColor={Colors.textMuted} />
-          </View>
-          <View style={styles.rowItem}>
-            <FieldLabel label="Heure début" required />
-            <TextInput style={styles.input} value={startTime} onChangeText={setStartTime} placeholderTextColor={Colors.textMuted} />
-          </View>
+<View style={styles.rowItem}>
+  <FieldLabel label="Date début" required />
+  <TextInput
+    style={[
+      styles.input,
+      startDate.length > 0 && !isValidDate(startDate) && styles.inputError,
+    ]}
+    value={startDate}
+    onChangeText={setStartDate}
+    placeholder="2026-05-25"
+    placeholderTextColor={Colors.textMuted}
+    keyboardType="numeric"
+    maxLength={10}
+  />
+  {startDate.length > 0 && !isValidDate(startDate) && (
+    <Text style={styles.fieldError}>Format attendu : YYYY-MM-DD</Text>
+  )}
+</View>
+
+<View style={styles.rowItem}>
+  <FieldLabel label="Heure début" required />
+  <TextInput
+    style={[
+      styles.input,
+      startTime.length > 0 && !isValidTime(startTime) && styles.inputError,
+    ]}
+    value={startTime}
+    onChangeText={setStartTime}
+    placeholder="14:00"
+    placeholderTextColor={Colors.textMuted}
+    keyboardType="numeric"
+    maxLength={5}
+  />
+  {startTime.length > 0 && !isValidTime(startTime) && (
+    <Text style={styles.fieldError}>Format attendu : HH:MM</Text>
+  )}
+</View>
         </View>
 
         <View style={styles.switchRow}>
@@ -243,6 +272,16 @@ function FieldLabel({ label, required }: { label: string; required?: boolean }) 
   );
 }
 
+function isValidDate(str: string): boolean {
+  // Format attendu : YYYY-MM-DD
+  return /^\d{4}-\d{2}-\d{2}$/.test(str) && !isNaN(new Date(str).getTime());
+}
+
+function isValidTime(str: string): boolean {
+  // Format attendu : HH:MM
+  return /^\d{2}:\d{2}$/.test(str);
+}
+
 const sectionStyles = StyleSheet.create({
   card: {
     backgroundColor: Colors.surface, borderRadius: Radius.lg,
@@ -313,7 +352,16 @@ const styles = StyleSheet.create({
   },
   switchLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   switchLabel: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
-
+  inputError: {
+  borderColor: Colors.danger,
+  backgroundColor: Colors.examBg,
+},
+fieldError: {
+  fontSize: 11,
+  color: Colors.danger,
+  fontWeight: '600',
+  marginTop: 4,
+},
   submitBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: Colors.navy, paddingVertical: 16, borderRadius: Radius.md,

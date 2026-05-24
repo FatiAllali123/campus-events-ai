@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Animated,
-  Platform,
 } from 'react-native';
 import { useAuth } from '../../hooks/useAuth';
 import {
@@ -28,6 +27,7 @@ import { Colors, Spacing, Radius } from '../../constants/theme';
 
 type AIType = 'search' | 'recommendation' | 'planning' | 'qa';
 
+// ✅ TABS est une constante, PAS un hook — correct ici en dehors du composant
 const TABS: { key: AIType; label: string; icon: string; color: string; bg: string; description: string; placeholder: string }[] = [
   {
     key: 'search',
@@ -69,12 +69,15 @@ const TABS: { key: AIType; label: string; icon: string; color: string; bg: strin
 
 export default function AssistantScreen() {
   const { user } = useAuth();
+
+  // ✅ TOUS les useState ensemble, en haut du composant
   const [activeTab, setActiveTab] = useState<AIType>('search');
   const [input, setInput] = useState('');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [emptyHistory, setEmptyHistory] = useState(false); // ✅ ICI, avec les autres
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
@@ -116,6 +119,7 @@ export default function AssistantScreen() {
     setError('');
     setResult('');
     setSubmitted(true);
+    setEmptyHistory(false);
 
     try {
       const cached = getLLMResultByType(user.email, activeTab, input.trim());
@@ -127,17 +131,30 @@ export default function AssistantScreen() {
 
       switch (activeTab) {
         case 'search':
-          prompt = buildSearchPrompt(input.trim(), allEvents); break;
+          prompt = buildSearchPrompt(input.trim(), allEvents);
+          break;
+
         case 'recommendation': {
           const favorites = getFavoritesByUser(user.email);
           const registrations = getRegistrationsByUser(user.email);
           const history = [...favorites, ...registrations].slice(0, 10);
-          prompt = buildRecommendationPrompt(history, upcoming); break;
+
+          if (history.length === 0) {
+            setEmptyHistory(true);
+            setLoading(false);
+            return;
+          }
+          prompt = buildRecommendationPrompt(history, upcoming);
+          break;
         }
+
         case 'planning':
-          prompt = buildPlanningPrompt(input.trim(), upcoming); break;
+          prompt = buildPlanningPrompt(input.trim(), upcoming);
+          break;
+
         case 'qa':
-          prompt = buildQAPrompt(input.trim(), allEvents); break;
+          prompt = buildQAPrompt(input.trim(), allEvents);
+          break;
       }
 
       const response = await callLLM({
@@ -172,6 +189,7 @@ export default function AssistantScreen() {
     setResult('');
     setError('');
     setSubmitted(false);
+    setEmptyHistory(false);
   }
 
   return (
@@ -213,18 +231,11 @@ export default function AssistantScreen() {
             return (
               <TouchableOpacity
                 key={tab.key}
-                style={[
-                  styles.tab,
-                  { backgroundColor: active ? tab.color : tab.bg },
-                ]}
+                style={[styles.tab, { backgroundColor: active ? tab.color : tab.bg }]}
                 onPress={() => handleTabChange(tab.key)}
                 activeOpacity={0.75}
               >
-                <Ionicons
-                  name={tab.icon as any}
-                  size={15}
-                  color={active ? '#fff' : tab.color}
-                />
+                <Ionicons name={tab.icon as any} size={15} color={active ? '#fff' : tab.color} />
                 <Text style={[styles.tabText, { color: active ? '#fff' : tab.color }]}>
                   {tab.label}
                 </Text>
@@ -241,10 +252,7 @@ export default function AssistantScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* ── Carte contexte ────────────────────────────────────── */}
-        <Animated.View style={[
-          styles.contextCard,
-          { borderLeftColor: currentTab.color, opacity: contentAnim },
-        ]}>
+        <Animated.View style={[styles.contextCard, { borderLeftColor: currentTab.color, opacity: contentAnim }]}>
           <View style={[styles.contextIcon, { backgroundColor: currentTab.bg }]}>
             <Ionicons name={currentTab.icon as any} size={18} color={currentTab.color} />
           </View>
@@ -254,10 +262,7 @@ export default function AssistantScreen() {
         {/* ── Input ─────────────────────────────────────────────── */}
         <View style={styles.inputWrap}>
           <TextInput
-            style={[
-              styles.input,
-              activeTab === 'recommendation' && styles.inputDisabled,
-            ]}
+            style={[styles.input, activeTab === 'recommendation' && styles.inputDisabled]}
             placeholder={currentTab.placeholder}
             value={input}
             onChangeText={setInput}
@@ -351,8 +356,21 @@ export default function AssistantScreen() {
           </Animated.View>
         ) : null}
 
-        {/* ── État vide ─────────────────────────────────────────── */}
-        {!loading && !error && !result && submitted && (
+        {/* ── Historique vide ───────────────────────────────────── */}
+        {emptyHistory && !loading && (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="bookmark-outline" size={28} color={Colors.textMuted} />
+            </View>
+            <Text style={styles.emptyTitle}>Pas encore d'historique</Text>
+            <Text style={styles.emptySub}>
+              Ajoutez des événements en favoris ou inscrivez-vous à des événements pour recevoir des recommandations personnalisées.
+            </Text>
+          </View>
+        )}
+
+        {/* ── État vide (résultat LLM vide) ─────────────────────── */}
+        {!loading && !error && !result && !emptyHistory && submitted && (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
               <Ionicons name="search-outline" size={28} color={Colors.textMuted} />
@@ -391,360 +409,103 @@ export default function AssistantScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
-
-  // ── Header ──
   pageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.sm,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl, paddingBottom: Spacing.sm,
   },
-  pageTitle: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: -0.8,
-  },
-  pageSub: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    fontWeight: '500',
-    marginTop: 3,
-  },
+  pageTitle: { fontSize: 30, fontWeight: '800', color: Colors.text, letterSpacing: -0.8 },
+  pageSub: { fontSize: 13, color: Colors.textMuted, fontWeight: '500', marginTop: 3 },
   aiBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: Colors.accentLight,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.accentBorder,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: Colors.accentLight, paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.accentBorder,
   },
-  aiBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: Colors.accent,
-    letterSpacing: 0.5,
-  },
-
-  // ── Warning ──
+  aiBadgeText: { fontSize: 12, fontWeight: '800', color: Colors.accent, letterSpacing: 0.5 },
   warningBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    marginHorizontal: Spacing.xl,
-    marginBottom: Spacing.md,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: Radius.sm,
-    backgroundColor: 'rgba(217,119,6,0.07)',
-    borderWidth: 1,
-    borderColor: 'rgba(217,119,6,0.15)',
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    marginHorizontal: Spacing.xl, marginBottom: Spacing.md,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: Radius.sm,
+    backgroundColor: 'rgba(217,119,6,0.07)', borderWidth: 1, borderColor: 'rgba(217,119,6,0.15)',
   },
-  warningText: {
-    fontSize: 12,
-    color: Colors.warning,
-    fontWeight: '600',
-    flex: 1,
-  },
-
-  // ── Tabs ──
+  warningText: { fontSize: 12, color: Colors.warning, fontWeight: '600', flex: 1 },
   tabsWrap: { marginBottom: Spacing.lg },
   tabsScroll: { paddingHorizontal: Spacing.xl, gap: 8 },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: Radius.full,
-    gap: 6,
-  },
+  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: Radius.full, gap: 6 },
   tabText: { fontSize: 13, fontWeight: '700' },
-
-  // ── Scroll ──
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: Spacing.xl, paddingBottom: 32 },
-
-  // ── Contexte ──
   contextCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderLeftWidth: 3,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.md,
+    marginBottom: Spacing.lg, borderWidth: 1, borderColor: Colors.border, borderLeftWidth: 3,
   },
-  contextIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  contextText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-    flex: 1,
-    lineHeight: 19,
-  },
-
-  // ── Input ──
+  contextIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  contextText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500', flex: 1, lineHeight: 19 },
   inputWrap: { position: 'relative', marginBottom: Spacing.md },
   input: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
-    paddingRight: 44,
-    fontSize: 15,
-    color: Colors.text,
-    minHeight: 90,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+    backgroundColor: Colors.surface, borderRadius: Radius.md, borderWidth: 1,
+    borderColor: Colors.border, padding: Spacing.lg, paddingRight: 44,
+    fontSize: 15, color: Colors.text, minHeight: 90,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1,
   },
-  inputDisabled: {
-    backgroundColor: Colors.surfaceAlt,
-    color: Colors.textMuted,
-  },
-  clearInput: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-  },
-  clearInputBtn: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.surfaceAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // ── Submit ──
+  inputDisabled: { backgroundColor: Colors.surfaceAlt, color: Colors.textMuted },
+  clearInput: { position: 'absolute', top: 12, right: 12 },
+  clearInputBtn: { width: 20, height: 20, borderRadius: 10, backgroundColor: Colors.surfaceAlt, justifyContent: 'center', alignItems: 'center' },
   submitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    borderRadius: Radius.md,
-    gap: 8,
-    marginBottom: Spacing.xl,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 15, borderRadius: Radius.md, gap: 8, marginBottom: Spacing.xl,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4,
   },
-  submitBtnDisabled: {
-    backgroundColor: Colors.border,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  submitText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  // ── Chargement ──
+  submitBtnDisabled: { backgroundColor: Colors.border, shadowOpacity: 0, elevation: 0 },
+  submitText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   loadingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.lg,
+    marginBottom: Spacing.lg, borderWidth: 1, borderColor: Colors.border,
   },
-  loadingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-
-  // ── Erreur ──
+  loadingDot: { width: 8, height: 8, borderRadius: 4 },
+  loadingText: { fontSize: 14, color: Colors.textSecondary, fontWeight: '500' },
   errorCard: {
-    backgroundColor: Colors.examBg,
-    borderRadius: Radius.md,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(220,38,38,0.15)',
-    gap: 10,
+    backgroundColor: Colors.examBg, borderRadius: Radius.md, padding: Spacing.lg,
+    marginBottom: Spacing.lg, borderWidth: 1, borderColor: 'rgba(220,38,38,0.15)', gap: 10,
   },
-  errorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  errorTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.danger,
-  },
-  errorText: {
-    fontSize: 13,
-    color: Colors.danger,
-    opacity: 0.8,
-    lineHeight: 19,
-  },
+  errorHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  errorTitle: { fontSize: 15, fontWeight: '700', color: Colors.danger },
+  errorText: { fontSize: 13, color: Colors.danger, opacity: 0.8, lineHeight: 19 },
   retryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.danger,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: Radius.sm,
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.danger,
+    alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 9, borderRadius: Radius.sm,
   },
   retryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-
-  // ── Résultat ──
   resultCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderTopWidth: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.lg,
+    marginBottom: Spacing.lg, borderWidth: 1, borderColor: Colors.border, borderTopWidth: 3,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
-  resultHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  resultIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  resultTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    flex: 1,
-  },
+  resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  resultIconWrap: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  resultTitle: { fontSize: 14, fontWeight: '700', flex: 1 },
   cacheBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: Colors.accentLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: Colors.accentLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full,
   },
-  cacheText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Colors.warning,
-    letterSpacing: 0.3,
-  },
-  resultDivider: {
-    height: 1,
-    backgroundColor: Colors.borderLight,
-    marginBottom: 12,
-  },
-  resultText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    lineHeight: 23,
-  },
-
-  // ── État vide ──
+  cacheText: { fontSize: 10, fontWeight: '800', color: Colors.warning, letterSpacing: 0.3 },
+  resultDivider: { height: 1, backgroundColor: Colors.borderLight, marginBottom: 12 },
+  resultText: { fontSize: 14, color: Colors.textSecondary, lineHeight: 23 },
   emptyCard: {
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    padding: Spacing.xxl,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    alignItems: 'center', gap: 10, backgroundColor: Colors.surface,
+    borderRadius: Radius.lg, padding: Spacing.xxl, borderWidth: 1, borderColor: Colors.border,
   },
   emptyIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: Colors.surfaceAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
+    width: 60, height: 60, borderRadius: 18, backgroundColor: Colors.surfaceAlt,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 4,
   },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-  },
-  emptySub: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 20,
-  },
-
-  // ── Hint initial ──
-  hintCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 14,
-  },
-  hintTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    marginBottom: 2,
-  },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: Colors.textSecondary },
+  emptySub: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
+  hintCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, gap: 14 },
+  hintTitle: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary, marginBottom: 2 },
   hintList: { gap: 12 },
-  hintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  hintNum: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  hintText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-    flex: 1,
-    lineHeight: 19,
-  },
+  hintRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hintNum: { width: 32, height: 32, borderRadius: 9, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  hintText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500', flex: 1, lineHeight: 19 },
 });

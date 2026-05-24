@@ -90,6 +90,7 @@ export function deleteEvent(id: string): void {
   db.runSync('DELETE FROM events WHERE id = ?', [id]);
 }
 
+/*
 export function searchEvents(query: string): Event[] {
   const db = getDatabase();
   const rows = db.getAllSync<any>(
@@ -106,7 +107,28 @@ export function searchEvents(query: string): Event[] {
     imageUrl: row.imageUrl || undefined,
   }));
 }
+*/
 
+export function searchEvents(query: string): Event[] {
+  const db = getDatabase();
+  const q = `%${query.toLowerCase()}%`;
+  const rows = db.getAllSync<any>(
+    `SELECT * FROM events 
+     WHERE LOWER(title) LIKE ? 
+        OR LOWER(description) LIKE ? 
+        OR LOWER(tags) LIKE ?
+     ORDER BY startDateTime DESC`,
+    [q, q, q]
+  );
+  return rows.map(row => ({
+    ...row,
+    tags: row.tags ? JSON.parse(row.tags) : undefined,
+    capacity: row.capacity || undefined,
+    endDateTime: row.endDateTime || undefined,
+    locationAddress: row.locationAddress || undefined,
+    imageUrl: row.imageUrl || undefined,
+  }));
+}
 export function getEventsByCategory(category: string): Event[] {
   const db = getDatabase();
   const rows = db.getAllSync<any>(
