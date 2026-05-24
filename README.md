@@ -89,7 +89,6 @@ Voir les commentaires JSDoc dans `services/llm.ts` pour la justification détail
 
 ---
 
----
 
 ## 🛠️ Stack technique
 
