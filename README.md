@@ -2,7 +2,19 @@
 
 Application mobile React Native / Expo pour la gestion intelligente des événements universitaires, avec assistant IA intégré (Groq + LLaMA 3.1).
 
+## 📋 Description
+CampusEvents AI est une application mobile cross-platform développée avec React Native et Expo, permettant aux étudiants et administrateurs de gérer les événements universitaires. Elle intègre un assistant IA (via Groq API) pour faciliter la recherche d'événements et offrir des recommandations personnalisées.
+
+
 ## ✨ Fonctionnalités
+
+#### 🔐 Authentification avec rôles — distinction Étudiant / Administrateur
+#### 📅 Gestion des événements — CRUD complet (création, lecture, modification, suppression)
+#### 🤖 Assistant IA intégré — powered by Groq API pour les recommandations et la recherche
+#### 💾 Persistance locale — stockage SQLite offline-first via expo-sqlite
+#### 🔒 Stockage sécurisé — tokens et données sensibles via expo-secure-store
+#### 🎨 UI soignée — typographies Playfair Display & DM Mono, dégradés avec expo-linear-gradient
+#### 🌐 Cross-platform — fonctionne sur Android, iOS et Web
 
 ### Rôle Étudiant
 - Catalogue d'événements avec recherche, filtres par catégorie et période
